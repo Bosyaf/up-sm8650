@@ -255,12 +255,54 @@ YYLL2="$KERNEL_DIR/scripts/dtc/dtc-lexer.l"
 [ -f "$YYLL1" ] && sed -i "s/extern YYLTYPE yylloc/YYLTYPE yylloc/g;s/YYLTYPE yylloc/extern YYLTYPE yylloc/g" "$YYLL1"
 [ -f "$YYLL2" ] && sed -i "s/extern YYLTYPE yylloc/YYLTYPE yylloc/g;s/YYLTYPE yylloc/extern YYLTYPE yylloc/g" "$YYLL2"
 
+# ==============================================================================
+# 🌐 BBRv3 & FQ YAPILANDIRMASI (Defconfig Mühürleme ve olddefconfig)
+# ==============================================================================
+TARGET_DEFCONFIG="$KERNEL_DIR/arch/arm64/configs/$KERNEL_DEFCONFIG"
+
+echo "🌐 TCP BBRv3 ve FQ ayarları $KERNEL_DEFCONFIG dosyasına işleniyor..."
+
+# Çakışan eski ağ yöneticisi ayarlarını temizle
+sed -i '/CONFIG_TCP_CONG_ADVANCED/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_TCP_CONG_BBR3/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_BBR3/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_TCP_CONG/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_CUBIC/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_BBR/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_NET_SCH_FQ/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_NET_SCH_DEFAULT/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_FQ/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_PFIFO_FAST/d' "$TARGET_DEFCONFIG"
+sed -i '/CONFIG_DEFAULT_NET_SCH/d' "$TARGET_DEFCONFIG"
+
+# BBRv3 ve FQ ayarlarını doğrudan defconfig sonuna mühürle
+cat << 'EOF' >> "$TARGET_DEFCONFIG"
+CONFIG_TCP_CONG_ADVANCED=y
+CONFIG_TCP_CONG_BBR3=y
+CONFIG_DEFAULT_BBR3=y
+CONFIG_DEFAULT_TCP_CONG="bbr3"
+CONFIG_NET_SCH_FQ=y
+CONFIG_NET_SCH_DEFAULT=y
+CONFIG_DEFAULT_FQ=y
+CONFIG_DEFAULT_NET_SCH="fq"
+EOF
+
 # Start build process
 echo "**** Building with $KBUILD_COMPILER_STRING ****"
 echo "**** Defconfig: $KERNEL_DEFCONFIG ****"
 
-# Build kernel
+# Defconfig oluştur
 make O="$OUT_DIR" $KERNEL_DEFCONFIG $MAKE_OPTS || exit 1
+
+# Kconfig bağımlılıklarını BBRv3'e göre kesinleştir
+make O="$OUT_DIR" olddefconfig $MAKE_OPTS || exit 1
+
+# BBRv3 Kontrolü (Log için)
+echo "🔍 Aktif TCP Kongestiyon Kontrolü:"
+grep "CONFIG_DEFAULT_TCP_CONG" "$OUT_DIR/.config" || true
+grep "CONFIG_DEFAULT_NET_SCH" "$OUT_DIR/.config" || true
+
+# Build kernel Image
 make -j$(nproc --all) O="$OUT_DIR" $MAKE_OPTS || exit 1
 
 # Build DTB/DTBO if they exist
